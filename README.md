@@ -8,9 +8,9 @@
 ### Week 0: Introduction
 
 ## Part 1: Machine Vision
-### Week 1: Image Classification
+### Week 1: Image Classification 
 ### Week 2: Face Recognition
-### Week 3: Object Localization
+### Week 3: Object Localization and Classification
 ### Week 4: Object Detection (Yolo2)
 
 ## Part 2: Natural Language Processing
