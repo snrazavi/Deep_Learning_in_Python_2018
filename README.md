@@ -1,7 +1,7 @@
 # Deep_Learning_in_Python_2018
 
-Course website: http://www.snrazavi.ir/deep-learning-workshop-in-python/
-YouTube videos (in Persian): https://www.youtube.com/playlist?list=PLW529xl11jnnsBxCuLrir5JunafxPYVnC
+* Course website: http://www.snrazavi.ir/deep-learning-workshop-in-python/
+* YouTube videos (in Persian): https://www.youtube.com/playlist?list=PLW529xl11jnnsBxCuLrir5JunafxPYVnC
 
 ## Contents
 ### Week 0: Introduction
