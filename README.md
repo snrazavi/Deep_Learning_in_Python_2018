@@ -18,3 +18,7 @@
 ### Week 6: Language Modelling 
 ### Week 7: Image Captioning
 ### Week 8: Machine Translation (En to Per)
+
+## Assignments:
+1. [Plant Seedling Classification from Kaggle](https://www.kaggle.com/c/plant-seedlings-classification)
+2. [Humpback Whale Identification Challenge from Kaggle](https://www.kaggle.com/c/whale-categorization-playground)
