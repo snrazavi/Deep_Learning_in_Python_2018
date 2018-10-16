@@ -1,7 +1,8 @@
-# Deep Learning in Python
+# Deep Learning in Python (PyTorch)
 * HamYad Research Lab., University of Tabriz (2018)
 * Course website: http://www.snrazavi.ir/deep-learning-workshop-in-python/
 * YouTube videos (in Persian): https://www.youtube.com/playlist?list=PLW529xl11jnnsBxCuLrir5JunafxPYVnC
+* All the implementations are based on PyTorch. To install PyTorch, please see (here)[https://pytorch.org/]. 
 
 ## Contents
 ### Week 0: Introduction
