@@ -1,5 +1,5 @@
-# Deep_Learning_in_Python_2018
-
+# Deep Learning in Python
+* HamYad Research Lab., University of Tabriz (2018)
 * Course website: http://www.snrazavi.ir/deep-learning-workshop-in-python/
 * YouTube videos (in Persian): https://www.youtube.com/playlist?list=PLW529xl11jnnsBxCuLrir5JunafxPYVnC
 
