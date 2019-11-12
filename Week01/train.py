@@ -34,12 +34,12 @@ def train_one_epoch(model, dataloder, criterion, optimizer, scheduler):
         optimizer.step()
         
         # statistics
-        running_loss  = (running_loss * i + loss.data[0]) / (i + 1)
+        running_loss  = (running_loss * i + loss.data.item()) / (i + 1)
         running_corrects += torch.sum(preds == labels.data)
         
         # report
         sys.stdout.flush()
-        sys.stdout.write("\r  Step %d/%d | Loss: %.5f" % (i, steps, loss.data[0]))
+        sys.stdout.write("\r  Step %d/%d | Loss: %.5f" % (i, steps, loss.data.item()))
         
     epoch_loss = running_loss
     epoch_acc = running_corrects / len(dataloder.dataset)
@@ -67,12 +67,12 @@ def validate_model(model, dataloder, criterion):
         loss = criterion(outputs, labels)
             
         # statistics
-        running_loss  = (running_loss * i + loss.data[0]) / (i + 1)
+        running_loss  = (running_loss * i + loss.data.item()) / (i + 1)
         running_corrects += torch.sum(preds == labels.data)
         
         # report
         sys.stdout.flush()
-        sys.stdout.write("\r  Step %d/%d | Loss: %.5f" % (i, steps, loss.data[0]))
+        sys.stdout.write("\r  Step %d/%d | Loss: %.5f" % (i, steps, loss.data.item()))
         
     epoch_loss = running_loss
     epoch_acc = running_corrects / len(dataloder.dataset)
