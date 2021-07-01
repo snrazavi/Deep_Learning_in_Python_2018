@@ -19,7 +19,7 @@ def create_validation_data(trn_dir, val_dir, split=0.1, ext='png'):
     
     for fname in tqdm(valid_ds):
         basename = os.path.basename(fname)
-        label = fname.split('\\')[-2]
+        label = fname.split(os.sep)[-2]
         src_folder = os.path.join(trn_dir, label)
         tgt_folder = os.path.join(val_dir, label)
         if not os.path.exists(tgt_folder):
