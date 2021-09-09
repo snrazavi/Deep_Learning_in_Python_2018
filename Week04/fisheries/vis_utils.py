@@ -1,29 +1,9 @@
-import os
-import cv2
+import itertools
+import torch
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
-from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
-from matplotlib.figure import Figure
 from tqdm import tqdm
-from PIL import Image
-
-import torch
-from torchvision import transforms
-from torch.autograd import Variable
-
-from utils import to_var
-
-
-totensor = transforms.Compose([transforms.ToTensor()])
-topilimg = transforms.Compose([transforms.ToPILImage()])
-cuda = torch.cuda.is_available()
-
-
-fish_class = ["ALB", "BET", "DOL", "LAG", "NoF", "OTHER", "SHARK", "YFT"]
-
-class_id = {k: v for v, k in enumerate(fish_class)}
-id_class = {k: v for k, v in enumerate(fish_class)}
+from sklearn.metrics import confusion_matrix
 
 
 def imshow(inp, title=None):
@@ -40,130 +20,220 @@ def imshow(inp, title=None):
         plt.title(title)
 
 
-def find_cls(x):
-    x = x.data.max(0)[1]
-    return x.sum()
-
-
-def plot_bbox(img, bbox, w, h, color='red'):
-    """ Plot bounding box on the image tensor. 
+def visualize_model(model, dataloader, device, num_images=6):
+    """ Visulaize the prediction of the model on a bunch of random data.
     """
-    img = img.cpu().numpy().transpose((1, 2, 0))  # (H, W, C)
+    model.eval()
     
-    # denormalize
-    mean = np.array([0.485, 0.456, 0.406])
-    std  = np.array([0.229, 0.224, 0.225])
-    img = std * img + mean
-    img = np.clip(img, 0, 1)
+    images_so_far = 0
+    fig = plt.figure(figsize=(10., 8.))
+
+    with torch.no_grad():
+        for i, (inputs, labels, _) in enumerate(dataloader):
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
+
+            for j in range(inputs.size()[0]):
+                images_so_far += 1
+                ax = plt.subplot(num_images//2, 2, images_so_far)
+                ax.axis('off')
+                ax.set_title(f'predicted: {dataloader.dataset.classes[preds[j]]}')
+                imshow(inputs.cpu().data[j])
+
+                if images_so_far == num_images:
+                    return
+
+
+def plot_errors(model, dataloader, device):
+    model.eval()
     
-    # bounding box
-    bb = np.array(bbox, dtype=np.float32)
-    bx, by = bb[0] * w, bb[1] * h
-    bw, bh = bb[2] * w, bb[3] * h
-        
-    # scale image
-    img = cv2.resize(img, (w, h))
+    plt.figure(figsize=(12, 24))
+    count = 0
     
-    # create BB rectangle
-    rect = plt.Rectangle((bx, by), bw, bh, color=color, fill=False, lw=3)
-    
-    # plot
-    plt.figure(figsize=(12, 8))
-    plt.axis('off')
-    plt.imshow(img)
-    plt.gca().add_patch(rect)
+    with torch.no_grad():
+        for (inputs, labels, _) in tqdm(dataloader):
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
+            incorrect_idxs = np.flatnonzero(preds.cpu().numpy() != labels.cpu().numpy())
+
+            for idx in incorrect_idxs:
+                count += 1
+                if count > 30: break
+                ax = plt.subplot(10, 3, count)
+                ax.axis('off')
+                ax.set_title(f'predicted: {dataloader.dataset.classes[preds[idx]]}')
+                imshow(inputs.cpu().data[idx])
     plt.show()
 
+    print("{} images out of {} were misclassified.".format(count, len(dataloader.dataset)))
 
-def get_bbox_corners(loc, im_w, im_h):
-    bx, by, bw, bh = loc[:]
+
+def plot_confusion_matrix(cm, classes, normalize=False, figsize=(12, 12), title='Confusion matrix', cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    (This function is copied from the scikit docs.)
+    """
+    plt.figure(figsize=figsize)
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    if normalize: cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    print(cm)
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        annot = "%.2f" % cm[i, j] if cm[i, j] > 0 else "" 
+        plt.text(j, i, annot, horizontalalignment="center", color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
     
-    bx, bw = bx * im_w, bw * im_w
-    by, bh = by * im_h, bh * im_h
-       
-    c0 = int(max(bx, 0))
-    r0 = int(max(by, 0))
-    c1 = int(min(bx + bw, im_w) - 1)
-    r1 = int(min(by + bh, im_h) - 1)
+
+def plots_raw(ims, figsize=(12,6), rows=1, titles=None):
+    f = plt.figure(figsize=figsize)
+    for i in range(len(ims)):
+        sp = f.add_subplot(rows, ceildiv(len(ims), rows), i+1)
+        sp.axis('Off')
+        if titles is not None: sp.set_title(titles[i], fontsize=16)
+        plt.imshow(ims[i])
+        
+
+def load_img_id(ds, idx, path): return np.array(PIL.Image.open(os.path.join(path, ds.fnames[idx])))
+
+
+class ImageModelResults():
+    """ Visualize the results of an image model
     
-    return c0, r0, c1, r1
+    Arguments:
+        ds (dataset): a dataset which contains the images
+        log_preds (numpy.ndarray): predictions for the dataset in log scale
+        
+    Returns:
+        ImageModelResults
+    """
+    def __init__(self, ds, log_preds):
+        """Initialize an ImageModelResults class instance"""
+        self.ds = ds
+        # returns the indices of the maximum value of predictions along axis 1, representing the predicted class
+        # log_preds.shape = (number_of_samples, number_of_classes);
+        # preds.shape = (number_of_samples,)
+        self.preds = np.argmax(log_preds, axis=1)
+        # computes the probabilities
+        self.probs = np.exp(log_preds)
+        # extracts the number of classes
+        self.num_classes = log_preds.shape[1]
 
+    def plot_val_with_title(self, idxs, y):
+        """ Displays the images and their probabilities of belonging to a certain class
+            
+            Arguments:
+                idxs (numpy.ndarray): indexes of the image samples from the dataset
+                y (int): the selected class
+                
+            Returns:
+                Plots the images in n rows [rows = n]
+        """
+        # if there are any samples to be displayed
+        if len(idxs) > 0:
+            imgs = np.stack([self.ds[x][0] for x in idxs])
+            title_probs = [self.probs[x,y] for x in idxs]
 
-def create_bbox(image_path, image_size, model, dpi=120):
-    model.eval()
-
-    image = Image.open(image_path)
-    im_w, im_h = image.size
-
-    # unsqueeze for make batch_size = 1
-    input = totensor(image.resize([image_size, image_size])).unsqueeze(0)
-    output_loc, output_cls = model(to_var(input))
-
-    if cuda:
-        output_loc = output_loc.cpu()
-        output_cls = output_cls.cpu()
-    
-    # squeeze because batch is 1
-    output_cls.data.squeeze_(0)
-    output_loc.data.squeeze_(0)
-    
-    # load image for matplotlib
-    image = mpimg.imread(image_path)
-    fig = Figure(figsize=(im_w/dpi, im_h/dpi), dpi=dpi)
-    canvas = FigureCanvas(fig)
-    ax = fig.gca()
-    ax.imshow(image)
-
-    c0, r0, c1, r1 = get_bbox_corners(output_loc.data, im_w, im_h)
-    ax.plot([c0, c1, c1, c0, c0], [r0, r0, r1, r1, r0])
-    ax.text(c0, r0, f"{id_class[find_cls(output_cls)]}", bbox={'alpha': 0.5, 'pad': 0.2})
-    ax.axis('off')
-
-    canvas.draw()
-    width, height = fig.get_size_inches() * fig.get_dpi()
-    image = np.fromstring(canvas.tostring_rgb(), dtype='uint8').reshape(int(height), int(width), 3)
-    # numpy array -> PIL data -> tensor
-    tensor = totensor(Image.fromarray(image))
-    # image is numpy array and tensor is tensor
-    return image, tensor
-
-
-class PlotLoss:
-    def __init__(self, vis, win=None, opts=None):
-        self.vis = vis
-        self.win = win
-        self.opts = opts
-        if self.win is None:
-            self.win = self.opts.get("title")
-        self.__iteration = 0
-        self.container = [[], []]
-
-    def append(self, data):
-        self.__iteration += 1
-        if isinstance(data, list):
-            assert len(data) <= 2, "data length should be 1 or 2"
-            self.container[0].append(data[0])
-            self.container[1].append(data[1])
-            X = np.array([range(self.__iteration), range(self.__iteration)]).T
-            Y = np.array(self.container).T
+            return plots(self.ds.denorm(imgs), rows=1, titles=title_probs)
+        # if idxs is empty return false
         else:
-            self.container[0].append(data)
-            X = np.array([range(self.__iteration)])
-            Y = np.array(self.container[0])
+            return False;
 
-        self.vis.line(X=X, Y=Y, win=self.win, opts=self.opts)
+    def most_by_mask(self, mask, y, mult):
+        """ Extracts the first 4 most correct/incorrect indexes from the ordered list of probabilities
+        
+            Arguments:
+                mask (numpy.ndarray): the mask of probabilities specific to the selected class; a boolean array with shape (num_of_samples,) which contains True where class==selected_class, and False everywhere else
+                y (int): the selected class
+                mult (int): sets the ordering; -1 descending, 1 ascending
+                
+            Returns:
+                idxs (ndarray): An array of indexes of length 4
+        """
+        idxs = np.where(mask)[0]
+        return idxs[np.argsort(mult * self.probs[idxs,y])[:4]]
 
+    def most_uncertain_by_mask(self, mask, y):
+        """ Extracts the first 4 most uncertain indexes from the ordered list of probabilities
+            
+            Arguments:
+                mask (numpy.ndarray): the mask of probabilities specific to the selected class; a boolean array with shape (num_of_samples,) which contains True where class==selected_class, and False everywhere else
+                y (int): the selected class
+            
+            Returns:
+                idxs (ndarray): An array of indexes of length 4
+        """
+        idxs = np.where(mask)[0]
+        # the most uncertain samples will have abs(probs-1/num_classes) close to 0;
+        return idxs[np.argsort(np.abs(self.probs[idxs,y]-(1/self.num_classes)))[:4]]
+    
+    def most_by_correct(self, y, is_correct):
+        """ Extracts the predicted classes which correspond to the selected class (y) and to the specific case (prediction is correct - is_true=True, prediction is wrong - is_true=False)
+            
+            Arguments:
+                y (int): the selected class
+                is_correct (boolean): a boolean flag (True, False) which specify the what to look for. Ex: True - most correct samples, False - most incorrect samples
+            
+            Returns:
+                idxs (numpy.ndarray): An array of indexes (numpy.ndarray)
+        """
+        # mult=-1 when the is_correct flag is true -> when we want to display the most correct classes we will make a descending sorting (argsort) because we want that the biggest probabilities to be displayed first.
+        # When is_correct is false, we want to display the most incorrect classes, so we want an ascending sorting since our interest is in the smallest probabilities.
+        mult = -1 if is_correct==True else 1
+        return self.most_by_mask(((self.preds == self.ds.y)==is_correct)
+                                 & (self.ds.y == y), y, mult)
 
-class ShowSample:
-    def __init__(self, model, vis, image_path, image_size, win=None, opts=None):
-        self.model = model
-        assert os.path.exists(image_path)
-        self.image_path = image_path
-        self.image_size = image_size
-        self.vis = vis
-        self.win = win
-        self.opts = opts
+    def plot_by_correct(self, y, is_correct):
+        """ Plots the images which correspond to the selected class (y) and to the specific case (prediction is correct - is_true=True, prediction is wrong - is_true=False)
+            
+            Arguments:
+                y (int): the selected class
+                is_correct (boolean): a boolean flag (True, False) which specify the what to look for. Ex: True - most correct samples, False - most incorrect samples
+        """    
+        return self.plot_val_with_title(self.most_by_correct(y, is_correct), y)
 
-    def show(self):
-        _, tensor = create_bbox(self.image_path, self.image_size, self.model)
-        self.vis.image(img=tensor, win=self.win, opts=self.opts)
+    def most_by_uncertain(self, y):
+        """ Extracts the predicted classes which correspond to the selected class (y) and have probabilities nearest to 1/number_of_classes (eg. 0.5 for 2 classes, 0.33 for 3 classes) for the selected class.
+            
+            Arguments:
+                y (int): the selected class
+            
+            Returns:
+                idxs (numpy.ndarray): An array of indexes (numpy.ndarray)
+        """
+        return self.most_uncertain_by_mask((self.ds.y == y), y)
+
+    def plot_most_correct(self, y):
+        """ Plots the images which correspond to the selected class (y) and are most correct.
+            
+            Arguments:
+                y (int): the selected class
+        """
+        return self.plot_by_correct(y, True)
+    def plot_most_incorrect(self, y): 
+        """ Plots the images which correspond to the selected class (y) and are most incorrect.
+            
+            Arguments:
+                y (int): the selected class
+        """
+        return self.plot_by_correct(y, False)
+    def plot_most_uncertain(self, y):
+        """ Plots the images which correspond to the selected class (y) and are most uncertain i.e have probabilities nearest to 1/number_of_classes.
+            
+            Arguments:
+                y (int): the selected class
+        """
+        return self.plot_val_with_title(self.most_by_uncertain(y), y)
+
