@@ -2,14 +2,11 @@ import os
 import sys
 import time
 import torch
-from utils import to_var
 
 
-def train_one_epoch(model, dataloder, criterion, optimizer, scheduler):
-    if scheduler is not None:
-        scheduler.step()
+def train_one_epoch(model, dataloder, criterion, optimizer, device):
     
-    model.train(True)
+    model.train()
     
     steps = len(dataloder.dataset) // dataloder.batch_size
     
@@ -19,13 +16,11 @@ def train_one_epoch(model, dataloder, criterion, optimizer, scheduler):
     running_corrects = 0
     
     for i, (inputs, labels, bboxes, _) in enumerate(dataloder):
-        inputs, labels, bboxes = to_var(inputs), to_var(labels), to_var(bboxes)
-        
-        optimizer.zero_grad()
-        
+        inputs, labels, bboxes = inputs.to(device), labels.to(device), bboxes.to(device)
+                
         # forward
         scores, locs = model(inputs)
-        _, preds = torch.max(scores.data, 1)
+        _, preds = torch.max(scores, 1)
         cls_loss, loc_loss = criterion(scores, locs, labels, bboxes)        
         loss = cls_loss + 10.0 * loc_loss
         
@@ -35,10 +30,10 @@ def train_one_epoch(model, dataloder, criterion, optimizer, scheduler):
         optimizer.step()
         
         # statistics
-        running_cls_loss = (running_cls_loss * i + cls_loss.data[0]) / (i + 1)
-        running_loc_loss = (running_loc_loss * i + loc_loss.data[0]) / (i + 1)
-        running_loss  = (running_loss * i + loss.data[0]) / (i + 1)
-        running_corrects += torch.sum(preds == labels.data)
+        running_cls_loss = (running_cls_loss * i + cls_loss.item()) / (i + 1)
+        running_loc_loss = (running_loc_loss * i + loc_loss.item()) / (i + 1)
+        running_loss  = (running_loss * i + loss.item()) / (i + 1)
+        running_corrects += torch.sum(preds == labels)
         
         # report
         sys.stdout.flush()
@@ -55,8 +50,8 @@ def train_one_epoch(model, dataloder, criterion, optimizer, scheduler):
     return model
 
     
-def validate_model(model, dataloder, criterion):
-    model.train(False)
+def validate_model(model, dataloder, criterion, device):
+    model.eval()
     
     steps = len(dataloder.dataset) // dataloder.batch_size
     
@@ -65,25 +60,26 @@ def validate_model(model, dataloder, criterion):
     running_loc_loss = 0.0
     running_corrects = 0
     
-    for i, (inputs, labels, bboxes, _) in enumerate(dataloder):
-        inputs, labels, bboxes = to_var(inputs, True), to_var(labels, True), to_var(bboxes, True)
-              
-        # forward
-        scores, locs = model(inputs)
-        _, preds = torch.max(scores.data, 1)
-        cls_loss, loc_loss = criterion(scores, locs, labels, bboxes)
-        loss = cls_loss + 10.0 * loc_loss
-            
-        # statistics
-        running_cls_loss = (running_cls_loss * i + cls_loss.data[0]) / (i + 1)
-        running_loc_loss = (running_loc_loss * i + loc_loss.data[0]) / (i + 1)
-        running_loss  = (running_loss * i + loss.data[0]) / (i + 1)
-        running_corrects += torch.sum(preds == labels.data)
-        
-        # report
-        sys.stdout.flush()
-        sys.stdout.write("\r  Step %d/%d | Loss: %.5f (%.5f + %.5f)" % 
-                         (i, steps, running_loss, running_cls_loss, running_loc_loss))
+    with torch.no_grad():
+        for i, (inputs, labels, bboxes, _) in enumerate(dataloder):
+            inputs, labels, bboxes = inputs.to(device), labels.to(device), bboxes.to(device)
+
+            # forward
+            scores, locs = model(inputs)
+            _, preds = torch.max(scores, 1)
+            cls_loss, loc_loss = criterion(scores, locs, labels, bboxes)
+            loss = cls_loss + 10.0 * loc_loss
+
+            # statistics
+            running_cls_loss = (running_cls_loss * i + cls_loss.item()) / (i + 1)
+            running_loc_loss = (running_loc_loss * i + loc_loss.item()) / (i + 1)
+            running_loss  = (running_loss * i + loss.item()) / (i + 1)
+            running_corrects += torch.sum(preds == labels)
+
+            # report
+            sys.stdout.flush()
+            sys.stdout.write("\r  Step %d/%d | Loss: %.5f (%.5f + %.5f)" % 
+                             (i, steps, running_loss, running_cls_loss, running_loc_loss))
         
     epoch_loss = running_loss
     epoch_acc = running_corrects / len(dataloder.dataset)
@@ -95,7 +91,7 @@ def validate_model(model, dataloder, criterion):
     return epoch_acc
 
 
-def train_model(model, train_dl, valid_dl, criterion, optimizer,
+def train_model(model, train_dl, valid_dl, criterion, optimizer, device,
                 scheduler=None, num_epochs=10):
 
     if not os.path.exists('models'):
@@ -111,8 +107,11 @@ def train_model(model, train_dl, valid_dl, criterion, optimizer,
         print('-' * 10)
 
         ## train and validate
-        model = train_one_epoch(model, train_dl, criterion, optimizer, scheduler)
-        val_acc = validate_model(model, valid_dl, criterion)
+        model = train_one_epoch(model, train_dl, criterion, optimizer, device)
+        val_acc = validate_model(model, valid_dl, criterion, device)
+        if scheduler is not None:
+            scheduler.step()
+
         
         # deep copy the model
         if val_acc > best_acc:

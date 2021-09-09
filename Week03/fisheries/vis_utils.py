@@ -4,7 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.metrics import confusion_matrix
-from utils import to_var
 
 
 def imshow(inp, title=None):
@@ -21,49 +20,52 @@ def imshow(inp, title=None):
         plt.title(title)
 
 
-def visualize_model(model, dataloader, num_images=6):
+def visualize_model(model, dataloader, device, num_images=6):
     """ Visulaize the prediction of the model on a bunch of random data.
     """
-    model.train(False)
+    model.eval()
     
     images_so_far = 0
     fig = plt.figure(figsize=(10., 8.))
 
-    for i, (inputs, labels, _) in enumerate(dataloader):
-        inputs, labels = to_var(inputs, volatile=True), to_var(labels, volatile=True)
+    with torch.no_grad():
+        for i, (inputs, labels, _) in enumerate(dataloader):
+            inputs, labels = inputs.to(device), labels.to(device)
 
-        outputs = model(inputs)
-        _, preds = torch.max(outputs.data, 1)
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
 
-        for j in range(inputs.size()[0]):
-            images_so_far += 1
-            ax = plt.subplot(num_images//2, 2, images_so_far)
-            ax.axis('off')
-            ax.set_title('predicted: {}'.format(dataloader.dataset.classes[preds[j]]))
-            imshow(inputs.cpu().data[j])
+            for j in range(inputs.size()[0]):
+                images_so_far += 1
+                ax = plt.subplot(num_images//2, 2, images_so_far)
+                ax.axis('off')
+                ax.set_title(f'predicted: {dataloader.dataset.classes[preds[j]]}')
+                imshow(inputs.cpu().data[j])
 
-            if images_so_far == num_images:
-                return
+                if images_so_far == num_images:
+                    return
 
-def plot_errors(model, dataloader):
-    model.train(False)
+
+def plot_errors(model, dataloader, device):
+    model.eval()
     
     plt.figure(figsize=(12, 24))
     count = 0
     
-    for (inputs, labels, _) in tqdm(dataloader):
-        inputs, labels = to_var(inputs, volatile=True), to_var(labels, volatile=True)
-        outputs = model(inputs)
-        _, preds = torch.max(outputs.data, 1)
-        incorrect_idxs = np.flatnonzero(preds.cpu().numpy() != labels.data.cpu().numpy())
-        
-        for idx in incorrect_idxs:
-            count += 1
-            if count > 30: break
-            ax = plt.subplot(10, 3, count)
-            ax.axis('off')
-            ax.set_title('predicted: {}'.format(dataloader.dataset.classes[preds[idx]]))
-            imshow(inputs.cpu().data[idx])
+    with torch.no_grad():
+        for (inputs, labels, _) in tqdm(dataloader):
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            _, preds = torch.max(outputs, 1)
+            incorrect_idxs = np.flatnonzero(preds.cpu().numpy() != labels.cpu().numpy())
+
+            for idx in incorrect_idxs:
+                count += 1
+                if count > 30: break
+                ax = plt.subplot(10, 3, count)
+                ax.axis('off')
+                ax.set_title(f'predicted: {dataloader.dataset.classes[preds[idx]]}')
+                imshow(inputs.cpu().data[idx])
     plt.show()
 
     print("{} images out of {} were misclassified.".format(count, len(dataloader.dataset)))
@@ -93,6 +95,7 @@ def plot_confusion_matrix(cm, classes, normalize=False, figsize=(12, 12), title=
     plt.tight_layout()
     plt.ylabel('True label')
     plt.xlabel('Predicted label')
+    
 
 def plots_raw(ims, figsize=(12,6), rows=1, titles=None):
     f = plt.figure(figsize=figsize)
@@ -101,6 +104,7 @@ def plots_raw(ims, figsize=(12,6), rows=1, titles=None):
         sp.axis('Off')
         if titles is not None: sp.set_title(titles[i], fontsize=16)
         plt.imshow(ims[i])
+        
 
 def load_img_id(ds, idx, path): return np.array(PIL.Image.open(os.path.join(path, ds.fnames[idx])))
 

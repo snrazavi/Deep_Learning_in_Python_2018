@@ -1,6 +1,5 @@
 import torch
 import torch.nn.functional as F
-from torch.autograd import Variable
 import torchvision.datasets as datasets
 import torchvision.transforms as T
 import bcolz
@@ -14,11 +13,6 @@ def save_array(fname, arr):
 def load_array(fname):
     return bcolz.open(fname)[:]
 
-
-def to_var(x, volatile=False):
-    if torch.cuda.is_available():
-        x = x.cuda()
-    return Variable(x, volatile=volatile)
 
 
 def create_img_dataloader(image_folder, transform=None, batch_size=25, shuffle=False, num_workers=2):
