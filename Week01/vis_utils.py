@@ -20,11 +20,10 @@ def imshow(inp, title=None):
         plt.title(title)
 
 
-def visualize_model(model, dataloader, num_images=6, device=None):
+def visualize_model(model, dataloader, device, num_images=6):
     """ Visulaize the prediction of the model on a bunch of random data.
     """
     model.eval()
-    device = device or torch.device('cpu')
     images_so_far = 0
     fig = plt.figure(figsize=(10., 8.))
     
@@ -45,9 +44,8 @@ def visualize_model(model, dataloader, num_images=6, device=None):
                 if images_so_far == num_images:
                     return
 
-def plot_errors(model, dataloader, device=None):
+def plot_errors(model, dataloader, device):
     model.eval()
-    device = device or torch.device('cpu')    
     plt.figure(figsize=(12, 24))
     count = 0
     
@@ -55,7 +53,7 @@ def plot_errors(model, dataloader, device=None):
         for inputs, labels in tqdm(dataloader):
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
-            _, preds = torch.max(outputs.data, 1)
+            _, preds = torch.max(outputs, 1)
             incorrect_idxs = np.flatnonzero(preds.cpu().numpy() != labels.cpu().numpy())
 
             for idx in incorrect_idxs:

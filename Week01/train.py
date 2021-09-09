@@ -5,11 +5,9 @@ import torch
 import torch.nn as nn
 
 
-def train_one_epoch(model, dataloder, criterion, optimizer, scheduler, device=None):    
+def train_one_epoch(model, dataloder, criterion, optimizer, device):    
     model.train()
-    
-    device = device or torch.device('cpu')
-    
+        
     steps = len(dataloder.dataset) // dataloder.batch_size
     
     running_loss = 0.0
@@ -47,11 +45,9 @@ def train_one_epoch(model, dataloder, criterion, optimizer, scheduler, device=No
     return model
 
     
-def validate_model(model, dataloder, criterion, device=None):
+def validate_model(model, dataloder, criterion, device):
     model.eval()
     
-    device = device or torch.device('cpu')
-
     steps = len(dataloder.dataset) // dataloder.batch_size
     
     running_loss = 0.0
@@ -82,8 +78,8 @@ def validate_model(model, dataloder, criterion, device=None):
     return epoch_acc
 
 
-def train_model(model, train_dl, valid_dl, criterion, optimizer,
-                scheduler=None, num_epochs=10, device=None):
+def train_model(model, train_dl, valid_dl, criterion, optimizer, device,
+                scheduler=None, num_epochs=10):
 
     if not os.path.exists('models'):
         os.mkdir('models')
@@ -100,7 +96,7 @@ def train_model(model, train_dl, valid_dl, criterion, optimizer,
         print('-' * 10)
 
         ## train and validate
-        model = train_one_epoch(model, train_dl, criterion, optimizer, scheduler, device)
+        model = train_one_epoch(model, train_dl, criterion, optimizer, device)
         val_acc = validate_model(model, valid_dl, criterion, device)
         if scheduler is not None:
             scheduler.step()
