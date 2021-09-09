@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 def create_validation_data(trn_dir, val_dir, split=0.1, ext='png'):
     if not os.path.exists(val_dir):
-       os.mkdir(val_dir)
+        os.mkdir(val_dir)
         
     train_ds = glob.glob(trn_dir + f'/*/*.{ext}')
     print(len(train_ds))
@@ -25,7 +25,7 @@ def create_validation_data(trn_dir, val_dir, split=0.1, ext='png'):
         if not os.path.exists(tgt_folder):
             os.mkdir(tgt_folder)
         shutil.move(os.path.join(src_folder, basename), os.path.join(tgt_folder, basename))
-		
+
 
 def pseudo_label(probs, tst_dir, test_dl, class_names, threshold=0.99999):
     num_data = len(test_dl.dataset)
@@ -37,10 +37,6 @@ def pseudo_label(probs, tst_dir, test_dl, class_names, threshold=0.99999):
     labels = [class_names[preds[i]] for i in candidate_idxs]
     
     dest_folder = os.path.join(DATA_DIR, 'pseudo', 'train')
-#      for name in class_names:
-#          folder = os.path.join(dest_folder, name)
-#          if not os.path.exists(folder):
-#              os.mkdir(folder)
         
     for _, (img, label) in tqdm(enumerate(zip(imgs, labels))):
         src = os.path.join(tst_dir, 'unk', img)
