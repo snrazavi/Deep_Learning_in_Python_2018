@@ -8,10 +8,10 @@ import torch
 import torch.nn.functional as F
 import torchvision.models as models
 
-from utils import to_var
 from model_utils import *
 
-def predict_proba(model, dataloader):
+
+def predict_proba(model, dataloader, device=None):
     """ Predict probabilty of classes.
     
         Inputs:
@@ -23,33 +23,31 @@ def predict_proba(model, dataloader):
             - predictions: a numpy array containing predicted probabilities for all of the data.
     
     """
-    model.train(False)
+    model.eval()
     predictions = []
     y_true = []
 
-    for inputs, targets in tqdm(dataloader):
-        inputs = to_var(inputs, volatile=True)
-        #bs, ncrops, c, h, w = inputs.size()
-        #outputs = model(inputs.view(-1, c, h, w))
-        #outputs = outputs.view(bs, ncrops, -1).mean(1)
-        outputs = model(inputs)
-        scores = F.softmax(outputs, dim=1)
-        predictions += [scores.data.cpu().numpy()]
-        y_true += [targets.cpu().numpy()]
-    
+    with torch.no_grad():
+        for inputs, targets in tqdm(dataloader):
+            inputs = inputs.to(device)
+            outputs = model(inputs)
+            scores = F.softmax(outputs, dim=1)
+            predictions += [scores.cpu().numpy()]
+            y_true += [targets.cpu().numpy()]
+
     predictions = np.concatenate(predictions)
     y_true = np.concatenate(y_true)
     return predictions, y_true
 
 
-def TTA(model, dl, tta_dl, is_test=False, n=5):
-    probs = predict_proba(model, dl)
+def TTA(model, dl, tta_dl, device=None, is_test=False, n=5):
+    probs = predict_proba(model, dl, device)
     probs = np.stack([probs] + [predict_proba(model, tta_dl) for i in range(n)]).mean(axis=0)
     y_true = np.concatenate([labels.cpu().numpy() for _, labels in tta_dl]) if not is_test else None
     return probs, y_true
 
 
-def predict_proba_five_ten_crop(model, dataloader):
+def predict_proba_five_ten_crop(model, dataloader, device):
     """ Predict probabilty of classes.
     
         Inputs:
@@ -61,41 +59,43 @@ def predict_proba_five_ten_crop(model, dataloader):
             - predictions: a numpy array containing predicted probabilities for all of the data.
     
     """
-    model.train(False)
+    model.eval()
     predictions = []
 
-    for inputs, _ in tqdm(dataloader):
-        inputs = to_var(inputs, volatile=True)
-        bs, ncrops, c, h, w = inputs.size()
-        outputs = model(inputs.view(-1, c, h, w))
-        outputs = outputs.view(bs, ncrops, -1).mean(1)
-        scores = F.softmax(outputs, dim=1)
-        predictions += [scores.data.cpu().numpy()]
+    with torch.no_grad():
+        for inputs, _ in tqdm(dataloader):
+            inputs = inputs.to(device)
+            bs, ncrops, c, h, w = inputs.size()
+            outputs = model(inputs.view(-1, c, h, w))
+            outputs = outputs.view(bs, ncrops, -1).mean(1)
+            scores = F.softmax(outputs, dim=1)
+            predictions += [scores.cpu().numpy()]
     
     predictions = np.concatenate(predictions)
     return predictions
 
 
-def predict_class(model, dataloader):
+def predict_class(model, dataloader, device):
     """ Predict probabilities for the given model and dataset
     """
-    model.train(False)
+    model.eval()
     result = []
     y = []
     
-    for inputs, targets in tqdm(dataloader):
-        inputs = to_var(inputs, volatile=True)
-        scores = model(inputs)
-        _, preds = torch.max(scores.data, 1)
-        result += [preds.cpu().numpy()]
-        y += [targets.cpu().numpy()]
+    with torch.no_grad():
+        for inputs, targets in tqdm(dataloader):
+            inputs = inputs.to(device)
+            scores = model(inputs)
+            _, preds = torch.max(scores, 1)
+            result += [preds.cpu().numpy()]
+            y += [targets.cpu().numpy()]
         
     result = np.concatenate(result)
     y = np.concatenate(y)
     return result, y
 
 
-def predict_class_names(model, dataloader, class_names):
+def predict_class_names(model, dataloader, class_names, device):
     """ Predict probabilities for the given model and dataset
     
         Inputs:
@@ -106,16 +106,17 @@ def predict_class_names(model, dataloader, class_names):
         Output:
             - result: Predicted class name for each input as a python list
     """
-    model.train(False)
+    model.eval()
     result = []
     y = []
     
-    for inputs, labels in tqdm(dataloader):
-        inputs = to_var(inputs, volatile=True)
-        scores = model(inputs)
-        _, preds = torch.max(scores.data, 1)
-        result += [preds.cpu().numpy()]
-        y += [labels.cpu().numpy()]
+    with torch.no_grad():
+        for inputs, labels in tqdm(dataloader):
+            inputs = inputs.to(device)
+            scores = model(inputs)
+            _, preds = torch.max(scores, 1)
+            result += [preds.cpu().numpy()]
+            y += [labels.cpu().numpy()]
     
     result = np.concatenate(result)
     y = np.concatenate(y)
@@ -124,7 +125,7 @@ def predict_class_names(model, dataloader, class_names):
     return pred_class_names, y
 
 
-def predict_probs_for_models_from_folder(dataloader, models_dir="./models", num_classes=10):
+def predict_probs_for_models_from_folder(dataloader, models_dir="./models", num_classes=10, device=None):
     model_fnames = glob.glob(models_dir + '/*.pth') + glob.glob(models_dir + '/*.h5')
     for i in range(1):
         for model_fname in model_fnames:
@@ -153,7 +154,7 @@ def predict_probs_for_models_from_folder(dataloader, models_dir="./models", num_
                 raise NameError('Inavalid model name: {}'.format(model_name))
             
             # predic and save probabilities for this model in the models_dir
-            #probs = predict_proba(model, dataloader)
-            probs = predict_proba_five_ten_crop(model, dataloader)
+            model = model.to(device)
+            probs = predict_proba_five_ten_crop(model, dataloader, device)
             probs_fname = os.path.join(models_dir, "{}-{}.npy".format(basename, i))
             np.save(probs_fname, probs)

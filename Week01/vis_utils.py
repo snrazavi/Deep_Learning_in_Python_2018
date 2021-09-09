@@ -4,7 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 from sklearn.metrics import confusion_matrix
-from utils import to_var
 
 
 def imshow(inp, title=None):
@@ -21,49 +20,52 @@ def imshow(inp, title=None):
         plt.title(title)
 
 
-def visualize_model(model, dataloader, num_images=6):
+def visualize_model(model, dataloader, num_images=6, device=None):
     """ Visulaize the prediction of the model on a bunch of random data.
     """
-    model.train(False)
-    
+    model.eval()
+    device = device or torch.device('cpu')
     images_so_far = 0
     fig = plt.figure(figsize=(10., 8.))
-
-    for i, (inputs, labels) in enumerate(dataloader):
-        inputs, labels = to_var(inputs, volatile=True), to_var(labels, volatile=True)
-
-        outputs = model(inputs)
-        _, preds = torch.max(outputs.data, 1)
-
-        for j in range(inputs.size()[0]):
-            images_so_far += 1
-            ax = plt.subplot(num_images//2, 2, images_so_far)
-            ax.axis('off')
-            ax.set_title('predicted: {}'.format(dataloader.dataset.classes[preds[j]]))
-            imshow(inputs.cpu().data[j])
-
-            if images_so_far == num_images:
-                return
-
-def plot_errors(model, dataloader):
-    model.train(False)
     
+    with torch.no_grad():
+        for i, (inputs, labels) in enumerate(dataloader):
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            outputs = model(inputs)
+            _, preds = torch.max(outputs.data, 1)
+
+            for j in range(inputs.size()[0]):
+                images_so_far += 1
+                ax = plt.subplot(num_images//2, 2, images_so_far)
+                ax.axis('off')
+                ax.set_title('predicted: {}'.format(dataloader.dataset.classes[preds[j]]))
+                imshow(inputs.cpu().data[j])
+
+                if images_so_far == num_images:
+                    return
+
+def plot_errors(model, dataloader, device=None):
+    model.eval()
+    device = device or torch.device('cpu')    
     plt.figure(figsize=(12, 24))
     count = 0
     
-    for inputs, labels in tqdm(dataloader):
-        inputs, labels = to_var(inputs, volatile=True), to_var(labels, volatile=True)
-        outputs = model(inputs)
-        _, preds = torch.max(outputs.data, 1)
-        incorrect_idxs = np.flatnonzero(preds.cpu().numpy() != labels.data.cpu().numpy())
-        
-        for idx in incorrect_idxs:
-            count += 1
-            if count > 30: break
-            ax = plt.subplot(10, 3, count)
-            ax.axis('off')
-            ax.set_title('predicted: {}'.format(dataloader.dataset.classes[preds[idx]]))
-            imshow(inputs.cpu().data[idx])
+    with torch.no_grad():
+        for inputs, labels in tqdm(dataloader):
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            _, preds = torch.max(outputs.data, 1)
+            incorrect_idxs = np.flatnonzero(preds.cpu().numpy() != labels.cpu().numpy())
+
+            for idx in incorrect_idxs:
+                count += 1
+                if count > 30: break
+                ax = plt.subplot(10, 3, count)
+                ax.axis('off')
+                ax.set_title('predicted: {}'.format(dataloader.dataset.classes[preds[idx]]))
+                imshow(inputs.cpu().data[idx])
+    
     plt.show()
 
     print("{} images out of {} were misclassified.".format(count, len(dataloader.dataset)))
@@ -157,8 +159,6 @@ class ImageModelResults():
         """Initialize an ImageModelResults class instance"""
         self.ds = ds
         # returns the indices of the maximum value of predictions along axis 1, representing the predicted class
-        # log_preds.shape = (number_of_samples, number_of_classes);
-        # preds.shape = (number_of_samples,)
         self.preds = np.argmax(log_preds, axis=1)
         # computes the probabilities
         self.probs = np.exp(log_preds)
@@ -256,6 +256,7 @@ class ImageModelResults():
                 y (int): the selected class
         """
         return self.plot_by_correct(y, True)
+    
     def plot_most_incorrect(self, y): 
         """ Plots the images which correspond to the selected class (y) and are most incorrect.
             
@@ -263,6 +264,7 @@ class ImageModelResults():
                 y (int): the selected class
         """
         return self.plot_by_correct(y, False)
+    
     def plot_most_uncertain(self, y):
         """ Plots the images which correspond to the selected class (y) and are most uncertain i.e have probabilities nearest to 1/number_of_classes.
             

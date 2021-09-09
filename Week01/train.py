@@ -3,14 +3,12 @@ import sys
 import time
 import torch
 import torch.nn as nn
-from utils import to_var
 
 
-def train_one_epoch(model, dataloder, criterion, optimizer, scheduler):
-    if scheduler is not None:
-        scheduler.step()
+def train_one_epoch(model, dataloder, criterion, optimizer, scheduler, device=None):    
+    model.train()
     
-    model.train(True)
+    device = device or torch.device('cpu')
     
     steps = len(dataloder.dataset) // dataloder.batch_size
     
@@ -18,28 +16,27 @@ def train_one_epoch(model, dataloder, criterion, optimizer, scheduler):
     running_corrects = 0
     
     for i, (inputs, labels) in enumerate(dataloder):
-        inputs, labels = to_var(inputs), to_var(labels)
         
-        optimizer.zero_grad()
+        inputs, labels = inputs.to(device), labels.to(device)
         
         # forward
         outputs = model(inputs)
-        _, preds = torch.max(outputs.data, 1)
         loss = criterion(outputs, labels)
         
         # backward
+        optimizer.zero_grad()
         loss.backward()
         
         # update parameters
         optimizer.step()
         
         # statistics
-        running_loss  = (running_loss * i + loss.data[0]) / (i + 1)
-        running_corrects += torch.sum(preds == labels.data)
+        running_loss  = (running_loss * i + loss.item()) / (i + 1)
+        running_corrects += torch.sum(outputs.argmax(1) == labels)
         
         # report
         sys.stdout.flush()
-        sys.stdout.write("\r  Step %d/%d | Loss: %.5f" % (i, steps, loss.data[0]))
+        sys.stdout.write("\r  Step %d/%d | Loss: %.5f" % (i, steps, loss.item()))
         
     epoch_loss = running_loss
     epoch_acc = running_corrects / len(dataloder.dataset)
@@ -50,29 +47,31 @@ def train_one_epoch(model, dataloder, criterion, optimizer, scheduler):
     return model
 
     
-def validate_model(model, dataloder, criterion):
-    model.train(False)
+def validate_model(model, dataloder, criterion, device=None):
+    model.eval()
     
+    device = device or torch.device('cpu')
+
     steps = len(dataloder.dataset) // dataloder.batch_size
     
     running_loss = 0.0
     running_corrects = 0
     
-    for i, (inputs, labels) in enumerate(dataloder):
-        inputs, labels = to_var(inputs, True), to_var(labels, True)
-              
-        # forward
-        outputs = model(inputs)
-        _, preds = torch.max(outputs.data, 1)
-        loss = criterion(outputs, labels)
-            
-        # statistics
-        running_loss  = (running_loss * i + loss.data[0]) / (i + 1)
-        running_corrects += torch.sum(preds == labels.data)
-        
-        # report
-        sys.stdout.flush()
-        sys.stdout.write("\r  Step %d/%d | Loss: %.5f" % (i, steps, loss.data[0]))
+    with torch.no_grad():
+        for i, (inputs, labels) in enumerate(dataloder):
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            # forward
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+
+            # statistics
+            running_loss  = (running_loss * i + loss.item()) / (i + 1)
+            running_corrects += torch.sum(outputs.argmax(1) == labels)
+
+            # report
+            sys.stdout.flush()
+            sys.stdout.write("\r  Step %d/%d | Loss: %.5f" % (i, steps, loss.item()))
         
     epoch_loss = running_loss
     epoch_acc = running_corrects / len(dataloder.dataset)
@@ -84,11 +83,13 @@ def validate_model(model, dataloder, criterion):
 
 
 def train_model(model, train_dl, valid_dl, criterion, optimizer,
-                scheduler=None, num_epochs=10):
+                scheduler=None, num_epochs=10, device=None):
 
     if not os.path.exists('models'):
         os.mkdir('models')
     
+    device = device or torch.device('cpu')
+
     since = time.time()
        
     best_model_wts = model.state_dict()
@@ -99,13 +100,15 @@ def train_model(model, train_dl, valid_dl, criterion, optimizer,
         print('-' * 10)
 
         ## train and validate
-        model = train_one_epoch(model, train_dl, criterion, optimizer, scheduler)
-        val_acc = validate_model(model, valid_dl, criterion)
-        
+        model = train_one_epoch(model, train_dl, criterion, optimizer, scheduler, device)
+        val_acc = validate_model(model, valid_dl, criterion, device)
+        if scheduler is not None:
+            scheduler.step()
+       
         # deep copy the model
         if val_acc > best_acc:
             best_acc = val_acc
-            best_model_wts = model.state_dict().copy()
+            best_model_wts = model.state_dict()
             torch.save(best_model_wts, "./models/epoch-{}-acc-{:.5f}.pth".format(epoch, best_acc))
 
         print()
