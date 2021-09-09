@@ -4,6 +4,9 @@
 * [YouTube videos (in Persian)](https://www.youtube.com/playlist?list=PLW529xl11jnnsBxCuLrir5JunafxPYVnC)
 * All the implementations are based on PyTorch. To install PyTorch, please see [here](https://pytorch.org/). 
 
+## Updated (09/09/2021)
+- Week 01, week 02, week 03 updated to work with recent versions of PyTorch.
+
 ## Contents
 ### Week 0: Introduction
 
