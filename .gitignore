@@ -1,4 +1,5 @@
 venv/
 tmp/
+models/
 .ipynb_checkpoints/
 __pycache__/
