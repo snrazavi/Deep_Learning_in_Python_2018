@@ -91,7 +91,7 @@ def train(model, train_dl, valid_dl, criterion, optimizer, device, scheduler, nu
             best_acc = val_acc
             best_wts = model.state_dict().copy()
             torch.save(best_wts, 'models/lstm-{}-{}-{}-{}-{}-{}-{:.5f}.pth'.format(
-                epoch, max_len, min_count, model.embedding_dim, model.hidden_dim, model.num_layers, best_acc))
+                model.num_layers, max_len, min_count, model.embedding_dim, model.hidden_dim, epoch, best_acc))
 
         report += f'[Epoch: {epoch + 1:2d}/{num_epochs:2d}] | Training Loss: {trn_loss:.4f} | Testing Loss: {val_loss:.4f} | Training Acc: {trn_acc*100:.2f} | Testing Acc: {val_acc*100:.2f}\n'
 
