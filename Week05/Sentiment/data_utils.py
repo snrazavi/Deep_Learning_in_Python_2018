@@ -9,7 +9,7 @@ import torch
 from torch.utils.data import Dataset
 
 
-NLP = spacy.load('en')
+NLP = spacy.load('en_core_web_sm')
 
 
 def tokenizer(text):
