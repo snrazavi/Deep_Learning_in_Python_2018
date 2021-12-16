@@ -3,3 +3,5 @@ tmp/
 models/
 .ipynb_checkpoints/
 __pycache__/
+
+Week01/models
